@@ -101,7 +101,18 @@ const CHARS: &[char] = &[
 ];
 
 pub const RENDEZVOUS_SERVERS: &[&str] = &["rs-ny.rustdesk.com"];
+
+pub const RENDEZVOUS_SERVERS: &[&str] = match option_env!("RENDEZVOUS_SERVERS") {
+    Some(servers) if !servers.is_empty() => servers.split(',').collect::<Vec<_>>().leak(),
+    _ => PUBLIC_RENDEZVOUS_SERVERS,
+};
+
 pub const RS_PUB_KEY: &str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
+
+pub const RS_PUB_KEY: &str = match option_env!("RS_PUB_KEY") {
+    Some(key) if !key.is_empty() => key,
+    _ => PUBLIC_RS_PUB_KEY,
+};
 
 pub const RENDEZVOUS_PORT: i32 = 41116;
 pub const RELAY_PORT: i32 = 41117;
