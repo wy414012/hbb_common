@@ -960,7 +960,9 @@ impl Config {
     }
 
     pub fn no_register_device() -> bool {
-        BUILTIN_SETTINGS.read().unwrap()
+        BUILTIN_SETTINGS
+            .read()
+            .unwrap()
             .get(keys::OPTION_REGISTER_DEVICE)
             .map(|v| v == "N")
             .unwrap_or(false)
