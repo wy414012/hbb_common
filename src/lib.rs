@@ -424,8 +424,20 @@ pub struct VersionCheckResponse {
 
 pub const VER_TYPE_RUSTDESK_CLIENT: &str = "rustdesk-client";
 pub const VER_TYPE_RUSTDESK_SERVER: &str = "rustdesk-server";
-
+static ENABLE_VERSION_CHECK: bool = false;
 pub fn version_check_request(typ: String) -> (VersionCheckRequest, String) {
+    if !ENABLE_VERSION_CHECK {
+        return (
+            VersionCheckRequest {
+                typ,
+                os: String::new(),
+                os_version: String::new(),
+                arch: String::new(),
+                device_id: Vec::new(),
+            },
+            "".to_string(),
+        );
+    }
     const URL: &str = "https://api.rustdesk.com/version/latest";
 
     use sysinfo::System;
