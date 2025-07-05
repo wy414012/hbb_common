@@ -11,9 +11,13 @@ pub mod windows;
 use crate::{config::Config, log};
 #[cfg(not(debug_assertions))]
 use std::process::exit;
+#[cfg(not(debug_assertions))]
+use std::sync::Mutex;
 
 #[cfg(not(debug_assertions))]
-static mut GLOBAL_CALLBACK: Option<Box<dyn Fn()>> = None;
+lazy_static::lazy_static! {
+    static ref GLOBAL_CALLBACK: Mutex<Option<Box<dyn Fn() + Send>>> = Mutex::new(None);
+}
 
 #[cfg(not(debug_assertions))]
 extern "C" fn breakdown_signal_handler(sig: i32) {
@@ -61,10 +65,8 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
         )
         .ok();
     }
-    unsafe {
-        if let Some(callback) = &GLOBAL_CALLBACK {
-            callback()
-        }
+    if let Some(callback) = &*GLOBAL_CALLBACK.lock().unwrap() {
+        callback()
     }
     exit(0);
 }
@@ -72,10 +74,10 @@ extern "C" fn breakdown_signal_handler(sig: i32) {
 #[cfg(not(debug_assertions))]
 pub fn register_breakdown_handler<T>(callback: T)
 where
-    T: Fn() + 'static,
+    T: Fn() + 'static + Send,
 {
     unsafe {
-        GLOBAL_CALLBACK = Some(Box::new(callback));
+        *GLOBAL_CALLBACK.lock().unwrap() = Some(Box::new(callback));
         libc::signal(libc::SIGSEGV, breakdown_signal_handler as _);
     }
 }
