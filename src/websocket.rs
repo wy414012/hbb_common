@@ -15,7 +15,7 @@ use std::{
 };
 use tokio::{net::TcpStream, time::timeout};
 use tokio_tungstenite::{
-    connect_async, tungstenite::protocol::Message as WsMessage, MaybeTlsStream, WebSocketStream,
+    tungstenite::protocol::Message as WsMessage, MaybeTlsStream, WebSocketStream,
 };
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::Role;
@@ -30,8 +30,8 @@ pub struct WsFramedStream {
 impl WsFramedStream {
     pub async fn new<T: AsRef<str>>(
         url: T,
-        local_addr: Option<SocketAddr>,
-        proxy_conf: Option<&Socks5Server>,
+        _local_addr: Option<SocketAddr>,
+        _proxy_conf: Option<&Socks5Server>,
         ms_timeout: u64,
     ) -> ResultType<Self> {
         let url_str = url.as_ref();
@@ -42,8 +42,11 @@ impl WsFramedStream {
             .into_client_request()
             .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
-        let (stream, _) =
-            timeout(Duration::from_millis(ms_timeout), connect_async(request)).await??;
+        let (stream, _) = timeout(
+            Duration::from_millis(ms_timeout),
+            tokio_tungstenite::connect_async_with_config(request, None, false),
+        )
+        .await??;
 
         let addr = match stream.get_ref() {
             MaybeTlsStream::Plain(tcp) => tcp.peer_addr()?,
