@@ -65,7 +65,7 @@ impl FramedSocket {
         )))
     }
 
-    pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T: ToSocketAddrs>(
+    pub async fn new_proxy<'a, P: ToProxyAddrs, T: ToSocketAddrs>(
         proxy: P,
         local: T,
         username: &'a str,
