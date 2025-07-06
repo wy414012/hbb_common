@@ -451,19 +451,17 @@ impl Proxy {
         Input: AsyncRead + AsyncWrite + Unpin,
         T: IntoTargetAddr<'a>,
     {
-        use rustls_platform_verifier::BuilderVerifierExt;
+        use rustls_platform_verifier::tls_config;
         use std::convert::TryFrom;
+        let verifier = tls_config();
 
-        let config = rustls::ClientConfig::builder()
-            .with_platform_verifier()
-            .with_no_client_auth();
         let url_domain = self.intercept.get_domain()?;
 
         let domain = rustls_pki_types::ServerName::try_from(url_domain.as_str())
             .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
             .to_owned();
 
-        let tls_connector = TlsConnector::from(std::sync::Arc::new(config));
+        let tls_connector = TlsConnector::from(std::sync::Arc::new(verifier));
         let stream = tls_connector.connect(domain, io).await?;
         self.http_connect(stream, target).await
     }
