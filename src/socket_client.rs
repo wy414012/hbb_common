@@ -131,9 +131,9 @@ pub async fn connect_tcp<
 ) -> ResultType<crate::Stream> {
     let target_str = check_ws(&target.to_string());
     if is_ws_endpoint(&target_str) {
-        return Ok(Stream::WebSocket(
+        return Ok(Stream::WebSocket(Box::new(
             websocket::WsFramedStream::new(target_str, None, None, ms_timeout).await?,
-        ));
+        )));
     }
     connect_tcp_local(target, None, ms_timeout).await
 }
@@ -148,25 +148,25 @@ pub async fn connect_tcp_local<
     ms_timeout: u64,
 ) -> ResultType<Stream> {
     if let Some(conf) = Config::get_socks() {
-        return Ok(Stream::Tcp(
+        return Ok(Stream::Tcp(Box::new(
             FramedStream::connect(target, local, &conf, ms_timeout).await?,
-        ));
+        )));
     }
 
     if let Some(target_addr) = target.resolve() {
         if let Some(local_addr) = local {
             if local_addr.is_ipv6() && target_addr.is_ipv4() {
                 let resolved_target = query_nip_io(target_addr).await?;
-                return Ok(Stream::Tcp(
+                return Ok(Stream::Tcp(Box::new(
                     FramedStream::new(resolved_target, Some(local_addr), ms_timeout).await?,
-                ));
+                )));
             }
         }
     }
 
-    Ok(Stream::Tcp(
+    Ok(Stream::Tcp(Box::new(
         FramedStream::new(target, local, ms_timeout).await?,
-    ))
+    )))
 }
 
 #[inline]

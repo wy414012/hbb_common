@@ -151,13 +151,8 @@ impl FramedSocket {
         &mut self,
         ms: u64,
     ) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
-        if let Ok(res) =
-            tokio::time::timeout(std::time::Duration::from_millis(ms), self.next()).await
-        {
-            res
-        } else {
-            None
-        }
+        (tokio::time::timeout(std::time::Duration::from_millis(ms), self.next()).await)
+            .unwrap_or_default()
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
