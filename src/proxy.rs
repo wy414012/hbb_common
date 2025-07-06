@@ -77,7 +77,7 @@ impl IntoUrl for Url {
     }
 }
 
-impl<'a> IntoUrl for &'a str {
+impl IntoUrl for &str {
     fn into_url(self) -> Result<Url, ProxyError> {
         Url::parse(self)
             .map_err(ProxyError::UrlParseScheme)?
@@ -89,7 +89,7 @@ impl<'a> IntoUrl for &'a str {
     }
 }
 
-impl<'a> IntoUrl for &'a String {
+impl IntoUrl for &String {
     fn into_url(self) -> Result<Url, ProxyError> {
         (&**self).into_url()
     }
@@ -200,7 +200,7 @@ impl ProxyScheme {
             addrs
                 .into_iter()
                 .next()
-                .ok_or_else(|| ProxyError::UrlParseScheme(url::ParseError::EmptyHost))
+                .ok_or(ProxyError::UrlParseScheme(url::ParseError::EmptyHost))
         };
 
         let mut scheme: Self = match url.scheme() {
@@ -222,7 +222,7 @@ impl ProxyScheme {
         match self {
             ProxyScheme::Http { host, .. } => self.resolve_host(host, 80).await,
             ProxyScheme::Https { host, .. } => self.resolve_host(host, 443).await,
-            ProxyScheme::Socks5 { addr, .. } => Ok(addr.clone()),
+            ProxyScheme::Socks5 { addr, .. } => Ok(*addr),
         }
     }
 
@@ -316,10 +316,10 @@ impl Proxy {
     }
 
     pub fn is_http_or_https(&self) -> bool {
-        return match self.intercept {
+        match self.intercept {
             ProxyScheme::Socks5 { .. } => false,
             _ => true,
-        };
+        }
     }
 
     pub fn from_conf(conf: &Socks5Server, ms_timeout: Option<u64>) -> Result<Self, ProxyError> {
@@ -374,7 +374,7 @@ impl Proxy {
 
         let addr = stream.local_addr()?;
 
-        return match self.intercept {
+        match self.intercept {
             ProxyScheme::Http { .. } => {
                 info!("Connect to remote http proxy server: {}", proxy);
                 let stream =
@@ -424,7 +424,7 @@ impl Proxy {
                     0,
                 ))
             }
-        };
+        }
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -548,7 +548,7 @@ where
     let response_bytes = response_string.into_bytes();
     response.parse(&response_bytes)?;
 
-    return match response.code {
+    match response.code {
         Some(code) => {
             if code == 200 {
                 Ok(())
@@ -557,5 +557,5 @@ where
             }
         }
         None => Err(ProxyError::NoHttpCode),
-    };
+    }
 }
