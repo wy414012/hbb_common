@@ -170,10 +170,7 @@ impl WsFramedStream {
 
     #[inline]
     pub async fn next_timeout(&mut self, ms: u64) -> Option<Result<BytesMut, Error>> {
-        match timeout(Duration::from_millis(ms), self.next()).await {
-            Ok(res) => res,
-            Err(_) => None,
-        }
+        (timeout(Duration::from_millis(ms), self.next()).await).unwrap_or_default()
     }
 }
 

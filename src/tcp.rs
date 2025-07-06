@@ -192,11 +192,7 @@ impl FramedStream {
 
     #[inline]
     pub async fn next_timeout(&mut self, ms: u64) -> Option<Result<BytesMut, Error>> {
-        if let Ok(res) = super::timeout(ms, self.next()).await {
-            res
-        } else {
-            None
-        }
+        (super::timeout(ms, self.next()).await).unwrap_or_default()
     }
 
     pub fn set_key(&mut self, key: Key) {

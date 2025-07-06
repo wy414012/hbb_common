@@ -5,8 +5,8 @@ use tokio::net::TcpStream;
 
 // support Websocket and tcp.
 pub enum Stream {
-    WebSocket(websocket::WsFramedStream),
-    Tcp(tcp::FramedStream),
+    WebSocket(Box<websocket::WsFramedStream>),
+    Tcp(Box<tcp::FramedStream>),
 }
 
 impl Stream {
@@ -80,7 +80,7 @@ impl Stream {
         let ws_stream =
             websocket::WsFramedStream::new(url, local_addr, proxy_conf, timeout_ms).await?;
         log::debug!("WebSocket connection established");
-        Ok(Self::WebSocket(ws_stream))
+        Ok(Self::WebSocket(Box::new(ws_stream)))
     }
 
     /// send message
@@ -111,6 +111,6 @@ impl Stream {
 
     #[inline]
     pub fn from(stream: TcpStream, stream_addr: SocketAddr) -> Self {
-        Self::Tcp(tcp::FramedStream::from(stream, stream_addr))
+        Self::Tcp(Box::new(tcp::FramedStream::from(stream, stream_addr)))
     }
 }
