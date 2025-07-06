@@ -233,7 +233,7 @@ impl FingerprintingInfo {
                         .ok()
                         .and_then(|mac| mac)
                         .map(|mac| mac.to_string())
-                        .unwrap_or_else(|| "".to_string());
+                        .unwrap_or_default();
                 }
                 addr = addr.replace(":", "");
                 format!("{:0<16}", addr)
