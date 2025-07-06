@@ -99,7 +99,7 @@ impl IntoUrl for &String {
     }
 }
 
-impl<'a> IntoUrl for String {
+impl IntoUrl for String {
     fn into_url(self) -> Result<Url, ProxyError> {
         (&*self).into_url()
     }
@@ -316,10 +316,7 @@ impl Proxy {
     }
 
     pub fn is_http_or_https(&self) -> bool {
-        match self.intercept {
-            ProxyScheme::Socks5 { .. } => false,
-            _ => true,
-        }
+        !matches!(self.intercept, ProxyScheme::Socks5 { .. })
     }
 
     pub fn from_conf(conf: &Socks5Server, ms_timeout: Option<u64>) -> Result<Self, ProxyError> {
@@ -454,16 +451,19 @@ impl Proxy {
         Input: AsyncRead + AsyncWrite + Unpin,
         T: IntoTargetAddr<'a>,
     {
-        use rustls_platform_verifier::tls_config;
+        use rustls_platform_verifier::BuilderVerifierExt;
         use std::convert::TryFrom;
-        let verifier = tls_config();
+
+        let config = rustls::ClientConfig::builder()
+            .with_platform_verifier()
+            .with_no_client_auth();
         let url_domain = self.intercept.get_domain()?;
 
         let domain = rustls_pki_types::ServerName::try_from(url_domain.as_str())
             .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
             .to_owned();
 
-        let tls_connector = TlsConnector::from(std::sync::Arc::new(verifier));
+        let tls_connector = TlsConnector::from(std::sync::Arc::new(config));
         let stream = tls_connector.connect(domain, io).await?;
         self.http_connect(stream, target).await
     }

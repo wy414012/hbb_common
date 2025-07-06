@@ -216,7 +216,7 @@ pub fn gen_version() {
     println!("cargo:rerun-if-changed=Cargo.toml");
     use std::io::prelude::*;
     let mut file = File::create("./src/version.rs").unwrap();
-    for line in read_lines("Cargo.toml").unwrap().flatten() {
+    for line in read_lines("Cargo.toml").unwrap().map_while(Result::ok) {
         let ab: Vec<&str> = line.split('=').map(|x| x.trim()).collect();
         if ab.len() == 2 && ab[0] == "version" {
             file.write_all(format!("pub const VERSION: &str = {};\n", ab[1]).as_bytes())

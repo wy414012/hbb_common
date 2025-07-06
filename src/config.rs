@@ -1259,7 +1259,7 @@ impl Config {
         Self::set_trusted_devices(devices);
     }
 
-    pub fn remove_trusted_devices(hwids: &Vec<Bytes>) {
+    pub fn remove_trusted_devices(hwids: &[Bytes]) {
         let mut devices = Self::get_trusted_devices();
         devices.retain(|d| !hwids.contains(&d.hwid));
         Self::set_trusted_devices(devices);
@@ -1490,7 +1490,7 @@ impl PeerConfig {
     }
 
     pub fn batch_peers(
-        all: &Vec<(String, SystemTime, PathBuf)>,
+        all: &[(String, SystemTime, PathBuf)],
         from: usize,
         to: Option<usize>,
     ) -> (Vec<(String, SystemTime, PeerConfig)>, usize) {

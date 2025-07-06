@@ -74,11 +74,11 @@ fn finalize_block(input: &[u8; 16], key: &[u8; 16]) -> [u8; 16] {
 
     add_round_key(&mut state, &round_keys[0]);
 
-    for round in 1..10 {
+    for round_key in round_keys.iter().take(10).skip(1) {
         sub_bytes(&mut state);
         shift_rows(&mut state);
         mix_columns(&mut state);
-        add_round_key(&mut state, &round_keys[round]);
+        add_round_key(&mut state, round_key);
     }
 
     sub_bytes(&mut state);
@@ -156,8 +156,8 @@ fn get_system_entropy() -> [u8; 16] {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    for i in 0..8 {
-        entropy[i] = ((timestamp >> (32 - i)) & 0xFF) as u8;
+    for (i, byte) in entropy.iter_mut().enumerate().take(8) {
+        *byte = ((timestamp >> (32 - i)) & 0xFF) as u8;
     }
     entropy
 }

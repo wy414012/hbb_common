@@ -469,38 +469,43 @@ impl TransferJob {
             ..Default::default()
         }
     }
+}
 
-    pub fn new_read(
-        id: i32,
-        r#type: JobType,
-        remote: String,
-        data_source: DataSource,
-        file_num: i32,
-        show_hidden: bool,
-        is_remote: bool,
-        enable_overwrite_detection: bool,
-    ) -> ResultType<Self> {
-        log::info!("new read {}", data_source);
-        let (files, total_size) = match &data_source {
+#[derive(Default)]
+pub struct ReadJobOptions {
+    pub id: i32,
+    pub r#type: JobType,
+    pub remote: String,
+    pub data_source: DataSource,
+    pub file_num: i32,
+    pub show_hidden: bool,
+    pub is_remote: bool,
+    pub enable_overwrite_detection: bool,
+}
+
+impl TransferJob {
+    pub fn new_read(options: ReadJobOptions) -> ResultType<Self> {
+        log::info!("new read {}", options.data_source);
+        let (files, total_size) = match &options.data_source {
             DataSource::FilePath(p) => {
                 let p = p.to_str().ok_or(anyhow!("Invalid path"))?;
-                let files = get_recursive_files(p, show_hidden)?;
+                let files = get_recursive_files(p, options.show_hidden)?;
                 let total_size = files.iter().map(|x| x.size).sum();
                 (files, total_size)
             }
             DataSource::MemoryCursor(c) => (Vec::new(), c.get_ref().len() as u64),
         };
         Ok(Self {
-            id,
-            r#type,
-            remote,
-            data_source,
-            file_num,
-            show_hidden,
-            is_remote,
+            id: options.id,
+            r#type: options.r#type,
+            remote: options.remote,
+            data_source: options.data_source,
+            file_num: options.file_num,
+            show_hidden: options.show_hidden,
+            is_remote: options.is_remote,
             files,
             total_size,
-            enable_overwrite_detection,
+            enable_overwrite_detection: options.enable_overwrite_detection,
             ..Default::default()
         })
     }
@@ -641,9 +646,9 @@ impl TransferJob {
     }
 
     #[inline]
-    pub fn join(p: &PathBuf, name: &str) -> PathBuf {
+    pub fn join(p: &Path, name: &str) -> PathBuf {
         if name.is_empty() {
-            p.clone()
+            p.to_path_buf()
         } else {
             p.join(name)
         }

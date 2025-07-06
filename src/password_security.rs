@@ -116,7 +116,10 @@ pub fn encrypt_str_or_original(s: &str, version: &str, max_len: usize) -> String
 //       &[..2] return the left 2 bytes, s.chars().take(2) return the left 2 chars
 pub fn decrypt_str_or_original(s: &str, current_version: &str) -> (String, bool, bool) {
     if s.len() > VERSION_LEN && s.starts_with("00") {
-        if let Ok(v) = decrypt(s[VERSION_LEN..].as_bytes()) {
+        // 获取字符串的字节表示
+        let bytes = s.as_bytes();
+        // 直接使用字节切片，避免先切片字符串再转换为字节
+        if let Ok(v) = decrypt(&bytes[VERSION_LEN..]) {
             return (
                 String::from_utf8_lossy(&v).to_string(),
                 true,
@@ -162,35 +165,46 @@ pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, boo
     (v.to_owned(), false, !v.is_empty())
 }
 
-fn encrypt(v: &[u8]) -> Result<String, ()> {
+fn encrypt(v: &[u8]) -> Result<String, CryptError> {
     if !v.is_empty() {
         symmetric_crypt(v, true).map(|v| base64::encode(v, base64::Variant::Original))
     } else {
-        Err(())
+        Err(CryptError)
     }
 }
 
-fn decrypt(v: &[u8]) -> Result<Vec<u8>, ()> {
+fn decrypt(v: &[u8]) -> Result<Vec<u8>, CryptError> {
     if !v.is_empty() {
-        base64::decode(v, base64::Variant::Original).and_then(|v| symmetric_crypt(&v, false))
+        base64::decode(v, base64::Variant::Original)
+            .map_err(|_| CryptError)
+            .and_then(|v| symmetric_crypt(&v, false))
     } else {
-        Err(())
+        Err(CryptError)
     }
 }
 
-pub fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, ()> {
+#[derive(Debug)]
+pub struct CryptError;
+
+impl From<()> for CryptError {
+    fn from(_: ()) -> Self {
+        CryptError
+    }
+}
+
+pub fn symmetric_crypt(data: &[u8], encrypt: bool) -> Result<Vec<u8>, CryptError> {
     use sodiumoxide::crypto::secretbox;
     use std::convert::TryInto;
 
     let mut keybuf = crate::get_uuid();
     keybuf.resize(secretbox::KEYBYTES, 0);
-    let key = secretbox::Key(keybuf.try_into().map_err(|_| ())?);
+    let key = secretbox::Key(keybuf.try_into().map_err(|_| CryptError)?);
     let nonce = secretbox::Nonce([0; secretbox::NONCEBYTES]);
 
     if encrypt {
         Ok(secretbox::seal(data, &nonce, &key))
     } else {
-        secretbox::open(data, &nonce, &key)
+        secretbox::open(data, &nonce, &key).map_err(|_| CryptError)
     }
 }
 
