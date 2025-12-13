@@ -611,11 +611,8 @@ impl Proxy {
     where
         Input: AsyncRead + AsyncWrite + Unpin,
     {
-        use rustls_platform_verifier::tls_config;
         use std::convert::TryFrom;
-        let client_config = crate::verifier::client_config()
-            .map_err(|e| ProxyError::IoError(std::io::Error::other(e)))?;
-        let tls_connector = RustlsTlsConnector::from(std::sync::Arc::new(client_config));
+
         let url_domain = self.intercept.get_domain()?;
         let domain = rustls_pki_types::ServerName::try_from(url_domain.as_str())
             .map_err(|e| ProxyError::AddressResolutionFailed(e.to_string()))?
