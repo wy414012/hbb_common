@@ -1,18 +1,29 @@
 use crate::{
-    config::keys::OPTION_RELAY_SERVER,
-    config::{use_ws, Config, Socks5Server, RELAY_PORT, RENDEZVOUS_PORT},
+    config::{
+        keys::OPTION_RELAY_SERVER, use_ws, Config, Socks5Server, RELAY_PORT, RENDEZVOUS_PORT,
+    },
     protobuf::Message,
     socket_client::split_host_port,
     sodiumoxide::crypto::secretbox::Key,
     tcp::Encrypt,
+    tls::{get_cached_tls_accept_invalid_cert, get_cached_tls_type, upsert_tls_cache, TlsType},
     ResultType,
 };
+use anyhow::bail;
+use async_recursion::async_recursion;
 use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
-use std::{io::Error, net::SocketAddr, time::Duration};
+use std::{
+    io::{Error, ErrorKind},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{net::TcpStream, time::timeout};
+use tokio_native_tls::native_tls::TlsConnector;
 use tokio_tungstenite::{
-    tungstenite::protocol::Message as WsMessage, MaybeTlsStream, WebSocketStream,
+    connect_async_tls_with_config, tungstenite::protocol::Message as WsMessage, Connector,
+    MaybeTlsStream, WebSocketStream,
 };
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::Role;
@@ -25,29 +36,154 @@ pub struct WsFramedStream {
 }
 
 impl WsFramedStream {
+    #[inline]
+    fn get_connector(
+        tls_type: &TlsType,
+        danger_accept_invalid_certs: bool,
+    ) -> ResultType<Option<Connector>> {
+        match tls_type {
+            TlsType::Plain => Ok(Some(Connector::Plain)),
+            TlsType::NativeTls => {
+                let connector = TlsConnector::builder()
+                    .danger_accept_invalid_certs(danger_accept_invalid_certs)
+                    .build()?;
+                Ok(Some(Connector::NativeTls(connector)))
+            }
+            TlsType::Rustls => {
+                let connector = match crate::verifier::client_config(danger_accept_invalid_certs) {
+                    Ok(client_config) => Some(Connector::Rustls(Arc::new(client_config))),
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to get client config: {:?}, fallback to default connector",
+                            e
+                        );
+                        None
+                    }
+                };
+                Ok(connector)
+            }
+        }
+    }
+
+    async fn connect(
+        url: &str,
+        ms_timeout: u64,
+    ) -> ResultType<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        // to-do: websocket proxy.
+
+        let tls_type = get_cached_tls_type(url);
+        let is_tls_type_cached = tls_type.is_some();
+        let tls_type = tls_type.unwrap_or(TlsType::Rustls);
+        let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(&url);
+        Self::try_connect(
+            url,
+            ms_timeout,
+            tls_type,
+            is_tls_type_cached,
+            danger_accept_invalid_cert,
+            danger_accept_invalid_cert,
+        )
+        .await
+    }
+
+    #[async_recursion]
+    async fn try_connect(
+        url: &str,
+        ms_timeout: u64,
+        tls_type: TlsType,
+        is_tls_type_cached: bool,
+        danger_accept_invalid_cert: Option<bool>,
+        original_danger_accept_invalid_certs: Option<bool>,
+    ) -> ResultType<WebSocketStream<MaybeTlsStream<TcpStream>>> {
+        let ws_config = None;
+        let disable_nagle = false;
+        let request = url
+            .into_client_request()
+            .map_err(|e| Error::new(ErrorKind::Other, e))?;
+        let connector =
+            Self::get_connector(&tls_type, danger_accept_invalid_cert.unwrap_or(false))?;
+        match timeout(
+            Duration::from_millis(ms_timeout),
+            connect_async_tls_with_config(request, ws_config, disable_nagle, connector),
+        )
+        .await?
+        {
+            Ok((ws_stream, _)) => {
+                upsert_tls_cache(url, tls_type, danger_accept_invalid_cert.unwrap_or(false));
+                Ok(ws_stream)
+            }
+            Err(e) => match (tls_type, is_tls_type_cached, danger_accept_invalid_cert) {
+                (TlsType::Rustls, _, None) => {
+                    log::warn!(
+                            "WebSocket connection with rustls-tls failed, try accept invalid certs: {}, {:?}",
+                            url,
+                            e
+                        );
+                    Self::try_connect(
+                        url,
+                        ms_timeout,
+                        tls_type,
+                        is_tls_type_cached,
+                        Some(true),
+                        original_danger_accept_invalid_certs,
+                    )
+                    .await
+                }
+                (TlsType::Rustls, false, Some(_)) => {
+                    log::warn!(
+                        "WebSocket connection with rustls-tls failed, try native-tls: {}, {:?}",
+                        url,
+                        e
+                    );
+                    Self::try_connect(
+                        url,
+                        ms_timeout,
+                        TlsType::NativeTls,
+                        is_tls_type_cached,
+                        original_danger_accept_invalid_certs,
+                        original_danger_accept_invalid_certs,
+                    )
+                    .await
+                }
+                (TlsType::NativeTls, _, None) => {
+                    log::warn!(
+                            "WebSocket connection with native-tls failed, try accept invalid certs: {}, {:?}",
+                            url,
+                            e
+                        );
+                    Self::try_connect(
+                        url,
+                        ms_timeout,
+                        tls_type,
+                        is_tls_type_cached,
+                        Some(true),
+                        original_danger_accept_invalid_certs,
+                    )
+                    .await
+                }
+                _ => {
+                    log::error!(
+                        "WebSocket connection failed with tls_type {:?}: {}, {:?}",
+                        tls_type,
+                        url,
+                        e
+                    );
+                    bail!(e)
+                }
+            },
+        }
+    }
+
     pub async fn new<T: AsRef<str>>(
         url: T,
         _local_addr: Option<SocketAddr>,
         _proxy_conf: Option<&Socks5Server>,
         ms_timeout: u64,
     ) -> ResultType<Self> {
-        let url_str = url.as_ref();
-
-        // to-do: websocket proxy.
-
-        let request = url_str.into_client_request().map_err(Error::other)?;
-
-        let (stream, _) = timeout(
-            Duration::from_millis(ms_timeout),
-            tokio_tungstenite::connect_async_with_config(request, None, false),
-        )
-        .await??;
-
+        let stream = Self::connect(url.as_ref(), ms_timeout).await?;
         let addr = match stream.get_ref() {
             MaybeTlsStream::Plain(tcp) => tcp.peer_addr()?,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
             MaybeTlsStream::NativeTls(tls) => tls.get_ref().get_ref().get_ref().peer_addr()?,
-            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             MaybeTlsStream::Rustls(tls) => tls.get_ref().0.peer_addr()?,
             _ => return Err(Error::other("Unsupported stream type").into()),
         };

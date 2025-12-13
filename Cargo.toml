@@ -6,6 +6,10 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+webrtc = ["dep:webrtc"]
+
 [dependencies]
 # new flexi_logger failed on rustc 1.75
 flexi_logger = { version = "0.27", features = ["async"] }
@@ -48,29 +52,32 @@ url = "2.5"
 sha2 = "0.10"
 whoami = "1.5"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-mac_address = "1.1"
-default_net = { git = "https://github.com/rustdesk-org/default_net" }
-machine-uid = { git = "https://github.com/rustdesk-org/machine-uid" }
-
-[target.'cfg(not(any(target_os = "macos", target_os = "windows")))'.dependencies]
 tokio-rustls = { version = "0.26", features = [
     "logging",
     "tls12",
     "ring",
 ], default-features = false }
-rustls-platform-verifier = "0.5"
-rustls-pki-types = "1.11"
-tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
-
-[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tokio-native-tls = "0.3"
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
-tungstenite = { version = "0.26", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.26", features = ["native-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+tungstenite = { version = "0.26", features = ["native-tls", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
+rustls-platform-verifier = "0.6"
+rustls-pki-types = "1.11"
+rustls-native-certs = "0.8"
+webpki-roots = "1.0.4"
+async-recursion = "1.1"
+webrtc = { version = "0.14.0", optional = true }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+mac_address = "1.1"
+default_net = { git = "https://github.com/rustdesk-org/default_net" }
+machine-uid = { git = "https://github.com/rustdesk-org/machine-uid" }
 
 [build-dependencies]
 protobuf-codegen = { version = "3.7" }
+
+[dev-dependencies]
+clap = "4.5.51"
+webrtc = "0.14.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = [
@@ -83,3 +90,8 @@ winapi = { version = "0.3", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 osascript = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sctk = { package = "smithay-client-toolkit", version = "0.20.0", default-features = false, features = [
+    "calloop",
+] }
