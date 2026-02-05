@@ -30,8 +30,8 @@ message PunchHoleRequest {
   bytes socket_addr_v6 = 10;
 }
 
-message ControllingStrategy {
-  enum Feature {
+message ControlPermissions {
+  enum Permission {
     keyboard = 0;
     remote_printer = 1;
     clipboard = 2;
@@ -45,7 +45,7 @@ message ControllingStrategy {
     block_input = 10;
     remote_modify = 11;
   }
-  uint64 disabled_features = 1;
+  uint64 permissions = 1;
 }
 
 message PunchHole {
@@ -56,7 +56,7 @@ message PunchHole {
   bool force_relay = 5;
   int32 upnp_port = 6;
   bytes socket_addr_v6 = 7;
-  ControllingStrategy controlling_strategy = 8;
+  ControlPermissions control_permissions = 8;
 }
 
 message TestNatRequest {
@@ -143,7 +143,7 @@ message RequestRelay {
   string licence_key = 6;
   ConnType conn_type = 7;
   string token = 8;
-  ControllingStrategy controlling_strategy = 9;
+  ControlPermissions control_permissions = 9;
 }
 
 message RelayResponse {
@@ -171,7 +171,7 @@ message FetchLocalAddr {
   bytes socket_addr = 1;
   string relay_server = 2;
   bytes socket_addr_v6 = 3;
-  ControllingStrategy controlling_strategy = 4;
+  ControlPermissions control_permissions = 4;
 }
 
 message LocalAddr {
