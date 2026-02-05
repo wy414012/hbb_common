@@ -68,9 +68,9 @@ pub use whoami;
 pub mod tls;
 pub mod verifier;
 pub use async_recursion;
+pub use libloading;
 #[cfg(target_os = "linux")]
 pub use users;
-pub use libloading;
 #[cfg(target_os = "linux")]
 pub use x11;
 
