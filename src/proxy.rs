@@ -9,7 +9,6 @@ use base64::{engine::general_purpose, Engine};
 use httparse::{Error as HttpParseError, Response, EMPTY_HEADER};
 use thiserror::Error as ThisError;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
-use tokio_native_tls::{native_tls, TlsConnector, TlsStream};
 use tokio_rustls::{client::TlsStream as RustlsTlsStream, TlsConnector as RustlsTlsConnector};
 use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr, TargetAddr};
 use tokio_util::codec::Framed;
@@ -45,8 +44,6 @@ pub enum ProxyError {
     HttpCode200(u16),
     #[error("The proxy address resolution failed: {0}")]
     AddressResolutionFailed(String),
-    #[error("The native tls error: {0}")]
-    NativeTlsError(#[from] tokio_native_tls::native_tls::Error),
 }
 
 const MAXIMUM_RESPONSE_HEADER_LENGTH: usize = 4096;
@@ -423,11 +420,15 @@ impl Proxy {
                         .await?
                     }
                     TlsType::NativeTls => {
-                        self.https_connect_nativetls_wrap_danger(
+                        log::warn!("NativeTls is disabled, falling back to Rustls");
+                        self.https_connect_rustls_wrap_danger(
                             &url,
                             local,
                             proxy,
+                            Some(stream),
                             &target_addr,
+                            tls_type.is_some(),
+                            danger_accept_invalid_cert,
                             danger_accept_invalid_cert,
                         )
                         .await?
@@ -472,52 +473,6 @@ impl Proxy {
                 ))
             }
         }
-    }
-
-    async fn https_connect_nativetls_wrap_danger<'a>(
-        &self,
-        url: &str,
-        local: SocketAddr,
-        proxy: SocketAddr,
-        target_addr: &TargetAddr<'a>,
-        danger_accept_invalid_cert: Option<bool>,
-    ) -> ResultType<DynTcpStream> {
-        let stream = self.new_stream(local, proxy).await?;
-        let s = super::timeout(
-            self.ms_timeout,
-            self.https_connect_nativetls(
-                stream,
-                &target_addr,
-                danger_accept_invalid_cert.unwrap_or(false),
-            ),
-        )
-        .await??;
-        upsert_tls_cache(
-            url,
-            TlsType::NativeTls,
-            danger_accept_invalid_cert.unwrap_or(false),
-        );
-        Ok(DynTcpStream(Box::new(s)))
-    }
-
-    pub async fn https_connect_nativetls<'a, Input>(
-        &self,
-        io: Input,
-        target_addr: &TargetAddr<'a>,
-        danger_accept_invalid_cert: bool,
-    ) -> Result<BufStream<TlsStream<Input>>, ProxyError>
-    where
-        Input: AsyncRead + AsyncWrite + Unpin,
-    {
-        let mut tls_connector_builder = native_tls::TlsConnector::builder();
-        if danger_accept_invalid_cert {
-            tls_connector_builder.danger_accept_invalid_certs(true);
-        }
-        let tls_connector = TlsConnector::from(tls_connector_builder.build()?);
-        let stream = tls_connector
-            .connect(&self.intercept.get_domain()?, io)
-            .await?;
-        self.http_connect(stream, target_addr).await
     }
 
     #[async_recursion]
@@ -581,20 +536,13 @@ impl Proxy {
                     )
                     .await?
                 } else if !is_tls_type_cached {
-                    log::warn!("Falling back to native-tls for HTTPS proxy server.");
-                    self.https_connect_nativetls_wrap_danger(
-                        &url,
-                        local,
-                        proxy,
-                        &target_addr,
-                        origin_danger_accept_invalid_cert,
-                    )
-                    .await?
-                } else {
                     log::error!(
-                        "Failed to connect to HTTPS proxy server with native-tls: {:?}.",
+                        "Failed to connect to HTTPS proxy server with rustls: {:?}.",
                         e
                     );
+                    bail!(e)
+                } else {
+                    log::error!("Failed to connect to HTTPS proxy server: {:?}.", e);
                     bail!(e)
                 };
                 Ok(s)
